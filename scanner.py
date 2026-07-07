@@ -19,12 +19,14 @@ sector_map = {t: "Auto" for t in auto_stocks}
 sector_map.update({t: "Pharma" for t in pharma_stocks})
 all_tickers = auto_stocks + pharma_stocks
 
+
 def detect_fvgs(df):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df['Bullish_FVG'] = df['Low'] > df['High'].shift(2)
     df['Bearish_FVG'] = df['High'] < df['Low'].shift(2)
     return df
+
 
 def scan_for_live_setup(df, direction='Bullish', swing_lookback=10,
                           max_bars_to_shift=20, max_bars_to_retest=15):
@@ -48,10 +50,12 @@ def scan_for_live_setup(df, direction='Bullish', swing_lookback=10,
         for j in range(sweep_loc + 1, min(sweep_loc + 1 + max_bars_to_shift, n)):
             if direction == 'Bullish':
                 if df['Close'].iloc[j] > recent_high:
-                    shift_loc = j; break
+                    shift_loc = j
+                    break
             else:
                 if df['Close'].iloc[j] < recent_low:
-                    shift_loc = j; break
+                    shift_loc = j
+                    break
         if shift_loc is None:
             continue
 
@@ -73,15 +77,21 @@ def scan_for_live_setup(df, direction='Bullish', swing_lookback=10,
         for m in range(shift_loc + 1, n):
             if direction == 'Bullish':
                 if df['Low'].iloc[m] <= gap_top:
-                    entry_loc = m; break
+                    entry_loc = m
+                    break
             else:
                 if df['High'].iloc[m] >= gap_bottom:
-                    entry_loc = m; break
+                    entry_loc = m
+                    break
 
         if direction == 'Bullish':
-            entry_price = gap_top; stop_loss = gap_bottom; target = recent_high
+            entry_price = gap_top
+            stop_loss = gap_bottom
+            target = recent_high
         else:
-            entry_price = gap_bottom; stop_loss = gap_top; target = recent_low
+            entry_price = gap_bottom
+            stop_loss = gap_top
+            target = recent_low
 
         if entry_loc is None:
             return {'Status': 'WATCHING', 'Entry_Price': round(entry_price, 2),
@@ -91,6 +101,7 @@ def scan_for_live_setup(df, direction='Bullish', swing_lookback=10,
                     'Stop_Loss': round(stop_loss, 2), 'Target': round(target, 2)}
 
     return None
+
 
 def log_signal_to_sheet(ticker, sector, direction, result):
     payload = {
@@ -111,23 +122,8 @@ def log_signal_to_sheet(ticker, sector, direction, result):
     except Exception as e:
         print(f"  Failed to log {ticker}: {e}")
 
-print(f"Scanning as of {datetime.now().strftime('%Y-%m-%d %H:%M')}...")
 
-for t in all_tickers:
-    for direction in ['Bullish', 'Bearish']:
-        try:
-            raw = yf.download(t, start="2024-01-01", progress=False)
-            if raw.empty:
-                continue
-            raw = detect_fvgs(raw)
-            result = scan_for_live_setup(raw, direction=direction)
-            if result:
-                print(f"{t} ({sector_map[t]}) {direction}: {result}")
-                log_signal_to_sheet(t, sector_map[t], direction, result)
-            time.sleep(1)
-        except Exception as e:
-            print(f"Error on {t} ({direction}): {e}")
-          def log_heartbeat(status, signals_found):
+def log_heartbeat(status, signals_found):
     payload = {
         "action": "HEARTBEAT",
         "date": datetime.now().strftime("%Y-%m-%d"),
@@ -140,29 +136,34 @@ for t in all_tickers:
     except Exception as e:
         print(f"Heartbeat failed: {e}")
 
-# Replace the bottom of your script with this:
-signal_count = 0
-scan_had_error = False
 
-for t in all_tickers:
-    for direction in ['Bullish', 'Bearish']:
-        try:
-            raw = yf.download(t, start="2024-01-01", progress=False)
-            if raw.empty:
-                continue
-            raw = detect_fvgs(raw)
-            result = scan_for_live_setup(raw, direction=direction)
-            if result:
-                print(f"{t} ({sector_map[t]}) {direction}: {result}")
-                log_signal_to_sheet(t, sector_map[t], direction, result)
-                signal_count += 1
-            time.sleep(1)
-        except Exception as e:
-            print(f"Error on {t} ({direction}): {e}")
-            scan_had_error = True
+def main():
+    print(f"Scanning as of {datetime.now().strftime('%Y-%m-%d %H:%M')}...")
 
-status = "Completed with errors" if scan_had_error else "Completed"
-log_heartbeat(status, signal_count)
-print("Scan complete.")
+    signal_count = 0
+    scan_had_error = False
 
-print("Scan complete.")
+    for t in all_tickers:
+        for direction in ['Bullish', 'Bearish']:
+            try:
+                raw = yf.download(t, start="2024-01-01", progress=False)
+                if raw.empty:
+                    continue
+                raw = detect_fvgs(raw)
+                result = scan_for_live_setup(raw, direction=direction)
+                if result:
+                    print(f"{t} ({sector_map[t]}) {direction}: {result}")
+                    log_signal_to_sheet(t, sector_map[t], direction, result)
+                    signal_count += 1
+                time.sleep(1)
+            except Exception as e:
+                print(f"Error on {t} ({direction}): {e}")
+                scan_had_error = True
+
+    status = "Completed with errors" if scan_had_error else "Completed"
+    log_heartbeat(status, signal_count)
+    print("Scan complete.")
+
+
+if __name__ == "__main__":
+    main()
