@@ -6,7 +6,7 @@ import requests
 import os
 from datetime import datetime
 
-WEBHOOK_URL = os.environ.get("https://script.google.com/macros/s/AKfycbyi32CC0DvCcRc909il79vg4ODZOoZ__KUZLtn-zup69Izh2l8xqu7HXSNGmSH8jsUqJw/exec")
+WEBHOOK_URL = os.environ.get("https://script.google.com/macros/s/AKfycbxZt-VPea4DPuLq43SEwK8tnNVy082IUhE2bQZ6D9bxa8nRFANk593TthU2y9j0HSv9Tw/exec")
 
 auto_stocks = ["MARUTI.NS", "M&M.NS", "BAJAJ-AUTO.NS", "EICHERMOT.NS",
                "HEROMOTOCO.NS", "ASHOKLEY.NS", "TVSMOTOR.NS", "BOSCHLTD.NS",
@@ -127,5 +127,42 @@ for t in all_tickers:
             time.sleep(1)
         except Exception as e:
             print(f"Error on {t} ({direction}): {e}")
+          def log_heartbeat(status, signals_found):
+    payload = {
+        "action": "HEARTBEAT",
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "status": status,
+        "signals_found": signals_found
+    }
+    try:
+        response = requests.post(WEBHOOK_URL, json=payload, timeout=15)
+        print(f"Heartbeat logged: {response.status_code}")
+    except Exception as e:
+        print(f"Heartbeat failed: {e}")
+
+# Replace the bottom of your script with this:
+signal_count = 0
+scan_had_error = False
+
+for t in all_tickers:
+    for direction in ['Bullish', 'Bearish']:
+        try:
+            raw = yf.download(t, start="2024-01-01", progress=False)
+            if raw.empty:
+                continue
+            raw = detect_fvgs(raw)
+            result = scan_for_live_setup(raw, direction=direction)
+            if result:
+                print(f"{t} ({sector_map[t]}) {direction}: {result}")
+                log_signal_to_sheet(t, sector_map[t], direction, result)
+                signal_count += 1
+            time.sleep(1)
+        except Exception as e:
+            print(f"Error on {t} ({direction}): {e}")
+            scan_had_error = True
+
+status = "Completed with errors" if scan_had_error else "Completed"
+log_heartbeat(status, signal_count)
+print("Scan complete.")
 
 print("Scan complete.")
